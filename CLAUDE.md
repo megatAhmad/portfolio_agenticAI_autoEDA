@@ -14,8 +14,8 @@
 | Backend | Python | 3.11+ |
 | Database | PostgreSQL | 15+ |
 | Vector Store | ChromaDB | 0.4+ |
-| Embeddings | HuggingFace | sentence-transformers/all-MiniLM-L6-v2 |
-| LLM | Azure OpenAI | GPT-4-Turbo, GPT-3.5-Turbo |
+| Embeddings | HuggingFace, Azure OpenAI, OpenRouter | sentence-transformers/all-MiniLM-L6-v2, OpenAI Embedding Models, Other Embedding Models |
+| LLM | Azure OpenAI, OpenRouter | GPT-4, Claude, Llama |
 | Fallback LLM | OpenRouter | Claude/Llama |
 | Code Sandbox | Docker | 24+ |
 | Visualization | Plotly | 5.18+ |
