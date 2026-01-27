@@ -1,0 +1,140 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-01-27",
+  "metrics": [
+    {
+      "name": "total_revenue",
+      "display_name": "Total Revenue",
+      "description": "Sum of all order amounts after discounts and returns",
+      "sql": "SUM(net_order_amount)",
+      "aggregation": "sum",
+      "format": "currency_usd",
+      "synonyms": ["sales", "income", "revenue", "gross sales"],
+      "sample_queries": [
+        "What was our revenue last quarter?",
+        "Show me sales by region"
+      ]
+    },
+    {
+      "name": "order_count",
+      "display_name": "Total Orders",
+      "description": "Count of distinct orders",
+      "sql": "COUNT(DISTINCT order_id)",
+      "aggregation": "count",
+      "format": "number",
+      "synonyms": ["number of orders", "order volume", "orders"]
+    },
+    {
+      "name": "average_order_value",
+      "display_name": "Average Order Value",
+      "description": "Average revenue per order",
+      "sql": "SUM(net_order_amount) / NULLIF(COUNT(DISTINCT order_id), 0)",
+      "aggregation": "calculated",
+      "format": "currency_usd",
+      "depends_on": ["total_revenue", "order_count"],
+      "synonyms": ["AOV", "avg order size", "average order"]
+    },
+    {
+      "name": "customer_count",
+      "display_name": "Total Customers",
+      "description": "Count of unique customers",
+      "sql": "COUNT(DISTINCT customer_id)",
+      "aggregation": "count",
+      "format": "number",
+      "synonyms": ["customers", "unique customers", "customer base"]
+    }
+  ],
+  "dimensions": [
+    {
+      "name": "customer_region",
+      "display_name": "Customer Region",
+      "column": "region",
+      "type": "categorical",
+      "description": "Geographic region of customer billing address",
+      "sample_values": ["North America", "Europe", "Asia Pacific", "Latin America"],
+      "synonyms": ["region", "geo", "geography", "location"]
+    },
+    {
+      "name": "order_date",
+      "display_name": "Order Date",
+      "column": "order_timestamp",
+      "type": "datetime",
+      "description": "Date when order was placed",
+      "granularities": ["day", "week", "month", "quarter", "year"]
+    },
+    {
+      "name": "product_category",
+      "display_name": "Product Category",
+      "column": "category",
+      "type": "categorical",
+      "description": "Top-level product category",
+      "sample_values": ["Electronics", "Apparel", "Home & Garden"],
+      "hierarchies": ["category", "subcategory", "product_name"],
+      "synonyms": ["category", "product type", "type"]
+    },
+    {
+      "name": "customer_segment",
+      "display_name": "Customer Segment",
+      "column": "segment",
+      "type": "categorical",
+      "description": "Customer segmentation tier",
+      "sample_values": ["Enterprise", "SMB", "Consumer"],
+      "synonyms": ["segment", "customer type", "tier"]
+    }
+  ],
+  "relationships": [
+    {
+      "from_table": "orders",
+      "to_table": "customers",
+      "join_type": "left",
+      "on": "customer_id",
+      "description": "Link orders to customer details"
+    },
+    {
+      "from_table": "orders",
+      "to_table": "products",
+      "join_type": "left",
+      "on": "product_id",
+      "description": "Link orders to product details"
+    },
+    {
+      "from_table": "order_items",
+      "to_table": "orders",
+      "join_type": "inner",
+      "on": "order_id",
+      "description": "Link order items to parent order"
+    }
+  ],
+  "business_rules": [
+    {
+      "name": "exclude_test_orders",
+      "applies_to": "all_metrics",
+      "filter": "is_test_order = FALSE",
+      "description": "Exclude internal test orders from all analyses"
+    },
+    {
+      "name": "revenue_recognition",
+      "applies_to": ["total_revenue", "average_order_value"],
+      "filter": "order_status IN ('completed', 'shipped')",
+      "description": "Only count revenue from fulfilled orders"
+    }
+  ],
+  "time_periods": {
+    "current_quarter": {
+      "description": "Current calendar quarter",
+      "sql_template": "DATE_TRUNC('quarter', CURRENT_DATE)"
+    },
+    "last_quarter": {
+      "description": "Previous calendar quarter",
+      "sql_template": "DATE_TRUNC('quarter', CURRENT_DATE - INTERVAL '3 months')"
+    },
+    "ytd": {
+      "description": "Year to date",
+      "sql_template": "DATE_TRUNC('year', CURRENT_DATE)"
+    },
+    "last_30_days": {
+      "description": "Last 30 days",
+      "sql_template": "CURRENT_DATE - INTERVAL '30 days'"
+    }
+  }
+}
