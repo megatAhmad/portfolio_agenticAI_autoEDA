@@ -18,6 +18,13 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
 
+try:
+    from app.utils.llm_client import create_llm_client_for_agent
+    from config.settings import get_settings, AppSettings
+    LLM_CLIENT_AVAILABLE = True
+except ImportError:
+    LLM_CLIENT_AVAILABLE = False
+
 
 class TaskType(str, Enum):
     """Types of tasks the system can execute."""
@@ -104,6 +111,7 @@ When creating plans:
         self,
         llm_client: Optional[Any] = None,
         model: Optional[str] = None,
+        settings: Optional[AppSettings] = None,
         # Legacy parameters for backward compatibility
         azure_endpoint: Optional[str] = None,
         azure_api_key: Optional[str] = None,
@@ -114,7 +122,8 @@ When creating plans:
 
         Args:
             llm_client: Pre-configured LLM client (OpenAI-compatible)
-            model: Model name to use
+            model: Model name to use (overrides configured model)
+            settings: Application settings (for model configuration)
             azure_endpoint: (Legacy) Azure OpenAI endpoint
             azure_api_key: (Legacy) Azure OpenAI API key
             azure_deployment: (Legacy) Azure deployment name
@@ -124,6 +133,14 @@ When creating plans:
         if llm_client is not None and model is not None:
             self._llm_client = llm_client
             self._model = model
+        # Use configured model for planning agent
+        elif LLM_CLIENT_AVAILABLE:
+            if settings is None:
+                settings = get_settings()
+            self._llm_client, self._model = create_llm_client_for_agent(
+                "planning_agent", settings, prefer_fast=False
+            )
+            logger.info(f"Planning Agent initialized with model: {self._model}")
         else:
             # Legacy initialization for backward compatibility
             self._llm_client: Optional[Any] = None

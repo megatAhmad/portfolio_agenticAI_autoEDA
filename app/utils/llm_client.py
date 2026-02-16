@@ -294,6 +294,99 @@ def call_llm(
                 raise
 
 
+def get_model_for_agent(
+    agent_type: str,
+    settings: Optional[AppSettings] = None,
+    prefer_fast: bool = False,
+) -> str:
+    """Get the configured model for a specific agent type.
+
+    Args:
+        agent_type: Type of agent (e.g., "planning_agent", "sql_generator", "python_analyst",
+                    "visualization", "uncertainty_scorer", "hitl_controller", "embeddings")
+        settings: Application settings
+        prefer_fast: If True and no agent-specific model set, use fast model
+
+    Returns:
+        Model name/deployment to use for this agent
+
+    Examples:
+        # Get model for planning agent
+        model = get_model_for_agent("planning_agent", settings)
+
+        # Get fast model for uncertainty scorer
+        model = get_model_for_agent("uncertainty_scorer", settings, prefer_fast=True)
+    """
+    if settings is None:
+        settings = get_settings()
+
+    # Get agent-specific model if configured
+    agent_model = getattr(settings.models, agent_type, "")
+    if agent_model:
+        logger.info(f"Using configured model for {agent_type}: {agent_model}")
+        return agent_model
+
+    # Fall back to default or fast model
+    if prefer_fast and settings.models.fast:
+        logger.info(f"Using fast model for {agent_type}: {settings.models.fast}")
+        return settings.models.fast
+
+    if settings.models.default:
+        logger.info(f"Using default model for {agent_type}: {settings.models.default}")
+        return settings.models.default
+
+    # Fall back to provider defaults
+    provider = settings.llm_provider.lower()
+    if provider == "azure":
+        model = (
+            settings.azure_openai.gpt35_deployment
+            if prefer_fast
+            else settings.azure_openai.gpt4_deployment
+        )
+    else:  # openrouter
+        model = "anthropic/claude-3-haiku" if prefer_fast else settings.openrouter.model
+
+    logger.info(f"Using provider default model for {agent_type}: {model}")
+    return model
+
+
+def create_llm_client_for_agent(
+    agent_type: str,
+    settings: Optional[AppSettings] = None,
+    prefer_fast: bool = False,
+) -> tuple[Any, str]:
+    """Create an LLM client with the appropriate model for a specific agent.
+
+    This is a convenience wrapper around create_llm_client that automatically
+    selects the right model based on agent type and configuration.
+
+    Args:
+        agent_type: Type of agent (e.g., "planning_agent", "sql_generator")
+        settings: Application settings
+        prefer_fast: If True, prefer fast model when no agent-specific model set
+
+    Returns:
+        Tuple of (client, model_name)
+
+    Examples:
+        # Create client for SQL generator with its configured model
+        client, model = create_llm_client_for_agent("sql_generator", settings)
+
+        # Create client for uncertainty scorer with fast model preference
+        client, model = create_llm_client_for_agent("uncertainty_scorer", settings, prefer_fast=True)
+    """
+    if settings is None:
+        settings = get_settings()
+
+    # Get the model for this agent
+    model = get_model_for_agent(agent_type, settings, prefer_fast)
+
+    # Create client (this will use provider default, we'll override the model)
+    client, _ = create_llm_client(settings, prefer_fast)
+
+    return client, model
+
+
 def get_provider_info(settings: Optional[AppSettings] = None) -> dict[str, Any]:
     """Get information about current LLM provider configuration.
 

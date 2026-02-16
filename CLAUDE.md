@@ -220,6 +220,70 @@ OPENROUTER_MODEL=anthropic/claude-3-sonnet
 
 The system automatically handles fallback between providers if one is unavailable.
 
+### Per-Agent Model Configuration
+
+The system allows you to specify different models for different agents/scenarios, providing fine-grained control over model selection and cost optimization.
+
+```bash
+# Default models (used when agent-specific model not set)
+MODEL_DEFAULT=                # Empty = use provider default
+MODEL_FAST=                   # Empty = use provider fast model
+
+# Per-agent model overrides
+MODEL_PLANNING_AGENT=         # Query decomposition and planning
+MODEL_SQL_GENERATOR=          # SQL query generation
+MODEL_PYTHON_ANALYST=         # Python code generation
+MODEL_VISUALIZATION=          # Chart type selection
+MODEL_UNCERTAINTY_SCORER=     # Confidence calculation
+MODEL_HITL_CONTROLLER=        # Clarification questions
+MODEL_EMBEDDINGS=             # Text embeddings
+```
+
+**Configuration Strategy:**
+
+1. **Cost Optimization** - Use cheaper models for simple tasks:
+   ```bash
+   MODEL_DEFAULT=gpt-4-turbo
+   MODEL_FAST=gpt-35-turbo
+   MODEL_VISUALIZATION=gpt-35-turbo
+   MODEL_UNCERTAINTY_SCORER=gpt-35-turbo
+   ```
+
+2. **Quality Optimization** - Use best models for critical tasks:
+   ```bash
+   MODEL_DEFAULT=anthropic/claude-3-sonnet
+   MODEL_SQL_GENERATOR=anthropic/claude-3-opus
+   MODEL_PYTHON_ANALYST=anthropic/claude-3-opus
+   MODEL_VISUALIZATION=anthropic/claude-3-haiku
+   ```
+
+3. **Mixed Provider** - Combine Azure and OpenRouter (requires both configured):
+   ```bash
+   # For Azure-configured system
+   MODEL_DEFAULT=gpt-4-turbo
+   MODEL_PYTHON_ANALYST=gpt-4-turbo
+   MODEL_VISUALIZATION=gpt-35-turbo
+   ```
+
+**Model Selection Priority:**
+1. Agent-specific model (e.g., `MODEL_SQL_GENERATOR`)
+2. Default model (`MODEL_DEFAULT` or `MODEL_FAST`)
+3. Provider default (from `LLM_PROVIDER` configuration)
+
+**Usage in Code:**
+```python
+from app.utils.llm_client import create_llm_client_for_agent
+from config.settings import get_settings
+
+settings = get_settings()
+
+# Get client with model for specific agent
+client, model = create_llm_client_for_agent("planning_agent", settings)
+
+# Or with fast model preference
+client, model = create_llm_client_for_agent("visualization", settings, prefer_fast=True)
+```
+
 ### Sandbox Mode
 
 Code execution can be configured to run in Docker sandbox (secure) or locally (faster, less secure):

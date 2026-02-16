@@ -60,6 +60,7 @@ ADA Consultant Pattern:
 - **Interactive Visualizations** - Auto-generated Plotly charts
 - **Plan Approval** - Users approve execution plans before running
 - **LLM Observability** - Langfuse integration for tracing, debugging, and cost tracking
+- **Per-Agent Model Selection** - Configure different models for each agent/scenario for cost and quality optimization
 
 ---
 

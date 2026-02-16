@@ -48,6 +48,50 @@ class LangfuseSettings(BaseSettings):
     host: str = Field(default="http://localhost:3000", description="Langfuse host URL")
 
 
+class ModelSettings(BaseSettings):
+    """Per-agent model configuration.
+
+    Allows specifying different models for different agents/scenarios.
+    If not specified, falls back to the default model for the provider.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="MODEL_")
+
+    # Default models (used when agent-specific model not specified)
+    default: str = Field(default="", description="Default model (empty = use provider default)")
+    fast: str = Field(default="", description="Fast/cheap model for simple operations (empty = use provider default)")
+
+    # Per-agent model specifications
+    planning_agent: str = Field(
+        default="",
+        description="Model for Planning Agent (query decomposition, plan creation). Empty = use default"
+    )
+    sql_generator: str = Field(
+        default="",
+        description="Model for SQL Generator Agent (SQL query generation). Empty = use default"
+    )
+    python_analyst: str = Field(
+        default="",
+        description="Model for Python Analyst Agent (Python code generation). Empty = use default"
+    )
+    visualization: str = Field(
+        default="",
+        description="Model for Visualization Agent (chart generation). Empty = use default"
+    )
+    uncertainty_scorer: str = Field(
+        default="",
+        description="Model for Uncertainty Scorer (confidence calculation). Empty = use fast model"
+    )
+    hitl_controller: str = Field(
+        default="",
+        description="Model for HITL Controller (clarification questions). Empty = use default"
+    )
+    embeddings: str = Field(
+        default="",
+        description="Model for embeddings (empty = use sentence-transformers/all-MiniLM-L6-v2)"
+    )
+
+
 class PostgresSettings(BaseSettings):
     """PostgreSQL database configuration."""
 
@@ -130,6 +174,7 @@ class AppSettings(BaseSettings):
     openrouter: OpenRouterSettings = Field(default_factory=OpenRouterSettings)
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
+    models: ModelSettings = Field(default_factory=ModelSettings)
 
     # Scoring weights
     data_completeness_weight: float = Field(

@@ -23,6 +23,13 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
 
+try:
+    from app.utils.llm_client import create_llm_client_for_agent
+    from config.settings import get_settings, AppSettings
+    LLM_CLIENT_AVAILABLE = True
+except ImportError:
+    LLM_CLIENT_AVAILABLE = False
+
 
 class ChartConfig(BaseModel):
     """Configuration for a chart."""
@@ -65,6 +72,10 @@ class VisualizationAgent:
 
     def __init__(
         self,
+        llm_client: Optional[Any] = None,
+        model: Optional[str] = None,
+        settings: Optional[AppSettings] = None,
+        # Legacy parameters for backward compatibility
         azure_endpoint: Optional[str] = None,
         azure_api_key: Optional[str] = None,
         azure_deployment: Optional[str] = None,
@@ -73,28 +84,47 @@ class VisualizationAgent:
         """Initialize Visualization Agent.
 
         Args:
-            azure_endpoint: Azure OpenAI endpoint
-            azure_api_key: Azure OpenAI API key
-            azure_deployment: Azure deployment name
-            openrouter_api_key: OpenRouter API key for fallback
+            llm_client: Pre-configured LLM client (OpenAI-compatible)
+            model: Model name to use (overrides configured model)
+            settings: Application settings (for model configuration)
+            azure_endpoint: (Legacy) Azure OpenAI endpoint
+            azure_api_key: (Legacy) Azure OpenAI API key
+            azure_deployment: (Legacy) Azure deployment name
+            openrouter_api_key: (Legacy) OpenRouter API key for fallback
         """
         self._llm_client: Optional[Any] = None
         self._model: str = ""
 
-        if azure_endpoint and azure_api_key and OPENAI_AVAILABLE:
+        # Use provided client if available
+        if llm_client is not None and model is not None:
+            self._llm_client = llm_client
+            self._model = model
+            logger.info(f"Visualization Agent initialized with provided client and model: {model}")
+        # Use configured model for visualization (prefer fast model)
+        elif LLM_CLIENT_AVAILABLE:
+            if settings is None:
+                settings = get_settings()
+            self._llm_client, self._model = create_llm_client_for_agent(
+                "visualization", settings, prefer_fast=True
+            )
+            logger.info(f"Visualization Agent initialized with model: {self._model}")
+        # Legacy Azure OpenAI
+        elif azure_endpoint and azure_api_key and OPENAI_AVAILABLE:
             self._llm_client = AzureOpenAI(
                 azure_endpoint=azure_endpoint,
                 api_key=azure_api_key,
                 api_version="2024-02-15-preview",
             )
             self._model = azure_deployment or "gpt-35-turbo"
-
+            logger.info("Using Azure OpenAI for visualization (legacy)")
+        # Legacy OpenRouter
         elif openrouter_api_key and OPENAI_AVAILABLE:
             self._llm_client = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=openrouter_api_key,
             )
             self._model = "anthropic/claude-3-haiku"
+            logger.info("Using OpenRouter for visualization (legacy)")
 
     def select_chart_type(
         self,

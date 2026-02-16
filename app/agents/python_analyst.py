@@ -17,6 +17,13 @@ except ImportError:
     OPENAI_AVAILABLE = False
     logger.warning("OpenAI not available")
 
+try:
+    from app.utils.llm_client import create_llm_client_for_agent
+    from config.settings import get_settings, AppSettings
+    LLM_CLIENT_AVAILABLE = True
+except ImportError:
+    LLM_CLIENT_AVAILABLE = False
+
 
 class CodeGenerationResult(BaseModel):
     """Result of code generation."""
@@ -63,6 +70,10 @@ Available packages: pandas, numpy, scipy, scikit-learn, plotly, matplotlib, seab
     def __init__(
         self,
         sandbox: Optional[SecureSandbox] = None,
+        llm_client: Optional[Any] = None,
+        model: Optional[str] = None,
+        settings: Optional[AppSettings] = None,
+        # Legacy parameters for backward compatibility
         azure_endpoint: Optional[str] = None,
         azure_api_key: Optional[str] = None,
         azure_deployment: Optional[str] = None,
@@ -72,34 +83,49 @@ Available packages: pandas, numpy, scipy, scikit-learn, plotly, matplotlib, seab
 
         Args:
             sandbox: Secure sandbox for code execution
-            azure_endpoint: Azure OpenAI endpoint
-            azure_api_key: Azure OpenAI API key
-            azure_deployment: Azure deployment name
-            openrouter_api_key: OpenRouter API key for fallback
+            llm_client: Pre-configured LLM client (OpenAI-compatible)
+            model: Model name to use (overrides configured model)
+            settings: Application settings (for model configuration)
+            azure_endpoint: (Legacy) Azure OpenAI endpoint
+            azure_api_key: (Legacy) Azure OpenAI API key
+            azure_deployment: (Legacy) Azure deployment name
+            openrouter_api_key: (Legacy) OpenRouter API key for fallback
         """
         self.sandbox = sandbox or SecureSandbox()
 
         self._llm_client: Optional[Any] = None
         self._model: str = ""
 
-        # Try Azure OpenAI first
-        if azure_endpoint and azure_api_key and OPENAI_AVAILABLE:
+        # Use provided client if available
+        if llm_client is not None and model is not None:
+            self._llm_client = llm_client
+            self._model = model
+            logger.info(f"Python Analyst initialized with provided client and model: {model}")
+        # Use configured model for Python analyst
+        elif LLM_CLIENT_AVAILABLE:
+            if settings is None:
+                settings = get_settings()
+            self._llm_client, self._model = create_llm_client_for_agent(
+                "python_analyst", settings, prefer_fast=False
+            )
+            logger.info(f"Python Analyst initialized with model: {self._model}")
+        # Try Azure OpenAI first (legacy)
+        elif azure_endpoint and azure_api_key and OPENAI_AVAILABLE:
             self._llm_client = AzureOpenAI(
                 azure_endpoint=azure_endpoint,
                 api_key=azure_api_key,
                 api_version="2024-02-15-preview",
             )
             self._model = azure_deployment or "gpt-4-turbo"
-            logger.info("Using Azure OpenAI for Python analysis")
-
-        # Fallback to OpenRouter
+            logger.info("Using Azure OpenAI for Python analysis (legacy)")
+        # Fallback to OpenRouter (legacy)
         elif openrouter_api_key and OPENAI_AVAILABLE:
             self._llm_client = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=openrouter_api_key,
             )
             self._model = "anthropic/claude-3-sonnet"
-            logger.info("Using OpenRouter for Python analysis")
+            logger.info("Using OpenRouter for Python analysis (legacy)")
 
     def generate_code(
         self,
