@@ -122,6 +122,7 @@ class SecureSandbox:
         timeout: int = 30,
         memory_limit: str = "512m",
         cpu_quota: int = 50000,
+        enable_sandbox: bool = True,
     ):
         """Initialize the sandbox.
 
@@ -129,17 +130,23 @@ class SecureSandbox:
             timeout: Maximum execution time in seconds
             memory_limit: Container memory limit (e.g., '512m')
             cpu_quota: CPU quota (50000 = 50%)
+            enable_sandbox: If True, use Docker sandbox. If False, execute locally (LESS SECURE)
         """
         self.timeout = timeout
         self.memory_limit = memory_limit
         self.cpu_quota = cpu_quota
+        self.enable_sandbox = enable_sandbox
         self.validator = CodeValidator()
 
-        try:
-            self.client = docker.from_env()
-        except docker.errors.DockerException as e:
-            logger.warning(f"Docker not available: {e}")
+        if enable_sandbox:
+            try:
+                self.client = docker.from_env()
+            except docker.errors.DockerException as e:
+                logger.warning(f"Docker not available: {e}")
+                self.client = None
+        else:
             self.client = None
+            logger.warning("Sandbox mode DISABLED - code will execute locally without Docker isolation!")
 
     def _ensure_image(self) -> str:
         """Ensure sandbox image exists, fall back to base Python if needed."""
@@ -204,7 +211,7 @@ class SecureSandbox:
         code: str,
         input_data: Optional[dict[str, Any]] = None,
     ) -> SandboxResult:
-        """Execute Python code in isolated container.
+        """Execute Python code in isolated container or locally.
 
         Args:
             code: Python code to execute
@@ -224,10 +231,15 @@ class SecureSandbox:
                 execution_time_ms=int((time.time() - start_time) * 1000),
             )
 
+        # If sandbox is disabled, execute locally
+        if not self.enable_sandbox:
+            logger.warning("Executing code locally without Docker sandbox - LESS SECURE!")
+            return self.execute_local(code, input_data)
+
         if not self.client:
             return SandboxResult(
                 success=False,
-                error="Docker not available",
+                error="Docker not available and sandbox is enabled",
                 execution_time_ms=int((time.time() - start_time) * 1000),
             )
 
@@ -396,27 +408,24 @@ with open('/tmp/output.json', 'w') as f:
     json.dump(output, f)
 '''
 
-    def execute_simple(self, code: str) -> SandboxResult:
-        """Execute simple code without Docker (for testing).
+    def execute_local(
+        self,
+        code: str,
+        input_data: Optional[dict[str, Any]] = None,
+    ) -> SandboxResult:
+        """Execute code locally without Docker sandbox.
 
-        WARNING: This is NOT secure and should only be used for testing.
+        WARNING: This is LESS SECURE than Docker sandbox. Code validation is still applied,
+        but there's no process isolation.
 
         Args:
             code: Python code to execute
+            input_data: Dictionary of data to make available
 
         Returns:
             SandboxResult with execution details
         """
         start_time = time.time()
-
-        # Validate code
-        is_valid, error = self.validator.validate(code)
-        if not is_valid:
-            return SandboxResult(
-                success=False,
-                error=f"Code validation failed: {error}",
-                execution_time_ms=int((time.time() - start_time) * 1000),
-            )
 
         # Execute in restricted namespace
         namespace = {
@@ -440,6 +449,10 @@ with open('/tmp/output.json', 'w') as f:
                 "zip": zip,
                 "map": map,
                 "filter": filter,
+                "abs": abs,
+                "round": round,
+                "isinstance": isinstance,
+                "type": type,
             }
         }
 
@@ -449,10 +462,46 @@ with open('/tmp/output.json', 'w') as f:
 
             namespace["pd"] = pd
             namespace["np"] = np
-            namespace["data"] = {}
+            namespace["data"] = input_data or {}
 
-            exec(code, namespace)
+            # Try to import optional libraries
+            try:
+                import plotly.express as px
+                import plotly.graph_objects as go
+                namespace["px"] = px
+                namespace["go"] = go
+            except ImportError:
+                pass
 
+            try:
+                import matplotlib.pyplot as plt
+                namespace["plt"] = plt
+            except ImportError:
+                pass
+
+            # Execute with timeout
+            import signal
+
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Execution timed out")
+
+            # Set timeout (only works on Unix-like systems)
+            try:
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(self.timeout)
+            except (AttributeError, ValueError):
+                # Windows doesn't support SIGALRM
+                pass
+
+            try:
+                exec(code, namespace)
+            finally:
+                try:
+                    signal.alarm(0)  # Cancel timeout
+                except (AttributeError, ValueError):
+                    pass
+
+            # Extract output
             output = {}
             if "result" in namespace:
                 result = namespace["result"]
@@ -461,15 +510,37 @@ with open('/tmp/output.json', 'w') as f:
                 else:
                     output["result"] = result
 
+            if "df" in namespace and isinstance(namespace["df"], pd.DataFrame):
+                output["dataframe"] = namespace["df"].to_dict(orient="records")
+
             return SandboxResult(
                 success=True,
                 output=output,
                 execution_time_ms=int((time.time() - start_time) * 1000),
             )
 
+        except TimeoutError:
+            return SandboxResult(
+                success=False,
+                error=f"Execution timed out after {self.timeout} seconds",
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
         except Exception as e:
             return SandboxResult(
                 success=False,
                 error=str(e),
                 execution_time_ms=int((time.time() - start_time) * 1000),
             )
+
+    def execute_simple(self, code: str) -> SandboxResult:
+        """Execute simple code without Docker (for testing).
+
+        WARNING: This is NOT secure and should only be used for testing.
+
+        Args:
+            code: Python code to execute
+
+        Returns:
+            SandboxResult with execution details
+        """
+        return self.execute_local(code, {})

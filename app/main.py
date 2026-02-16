@@ -127,6 +127,34 @@ def render_sidebar() -> None:
         st.subheader("Settings")
 
         settings = get_settings()
+
+        # LLM Provider Selection
+        llm_provider = st.selectbox(
+            "LLM Provider",
+            options=["azure", "openrouter"],
+            index=0 if settings.llm_provider == "azure" else 1,
+            help="Choose your LLM provider: Azure OpenAI or OpenRouter",
+        )
+
+        # Update settings if changed
+        if llm_provider != settings.llm_provider:
+            settings.llm_provider = llm_provider
+            st.session_state.settings_changed = True
+
+        # Sandbox Mode Toggle
+        sandbox_enabled = st.checkbox(
+            "Enable Sandbox (Recommended)",
+            value=settings.sandbox_enabled,
+            help="Run Python code in isolated Docker container for security. Disable only for development.",
+        )
+
+        if not sandbox_enabled:
+            st.warning("⚠️ Sandbox disabled - code will run locally (LESS SECURE)")
+
+        if sandbox_enabled != settings.sandbox_enabled:
+            settings.sandbox_enabled = sandbox_enabled
+            st.session_state.settings_changed = True
+
         threshold = st.slider(
             "Confidence threshold",
             min_value=0.5,
@@ -147,6 +175,19 @@ def render_sidebar() -> None:
         with col2:
             context_status = "✅" if st.session_state.context_uploaded else "⚠️"
             st.markdown(f"Context: {context_status}")
+
+        col3, col4 = st.columns(2)
+        with col3:
+            # Show LLM provider info
+            from app.utils.llm_client import get_provider_info
+            provider_info = get_provider_info(settings)
+            llm_status = "✅" if provider_info["configured"] else "❌"
+            st.markdown(f"LLM: {llm_status} {settings.llm_provider}")
+        with col4:
+            # Show sandbox status
+            sandbox_icon = "🔒" if settings.sandbox_enabled else "⚠️"
+            sandbox_text = "Sandbox" if settings.sandbox_enabled else "Local"
+            st.markdown(f"{sandbox_icon} {sandbox_text}")
 
         # Clear conversation
         st.divider()
@@ -244,12 +285,14 @@ def process_query(query: str) -> None:
             try:
                 # Step 1: Parse intent
                 from app.orchestration.planning_agent import PlanningAgent
+                from app.utils.llm_client import create_llm_client
+
+                # Create LLM client based on settings
+                llm_client, model = create_llm_client(settings)
 
                 planning_agent = PlanningAgent(
-                    azure_endpoint=settings.azure_openai.endpoint,
-                    azure_api_key=settings.azure_openai.api_key,
-                    azure_deployment=settings.azure_openai.gpt4_deployment,
-                    openrouter_api_key=settings.openrouter.api_key,
+                    llm_client=llm_client,
+                    model=model,
                 )
 
                 # Get context
@@ -438,13 +481,15 @@ def execute_plan(plan, removed_tasks: list) -> None:
                 if task.task_type.value == "sql_query":
                     # Execute SQL
                     from app.agents.sql_generator import SQLGeneratorAgent
+                    from app.utils.llm_client import create_llm_client
+
+                    llm_client, model = create_llm_client(settings)
 
                     sql_agent = SQLGeneratorAgent(
                         db_manager=st.session_state.db_manager,
                         semantic_layer=st.session_state.semantic_layer,
-                        azure_endpoint=settings.azure_openai.endpoint,
-                        azure_api_key=settings.azure_openai.api_key,
-                        azure_deployment=settings.azure_openai.gpt4_deployment,
+                        llm_client=llm_client,
+                        model=model,
                     )
 
                     gen_result, exec_result = sql_agent.generate_and_execute(

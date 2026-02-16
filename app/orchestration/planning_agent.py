@@ -102,6 +102,9 @@ When creating plans:
 
     def __init__(
         self,
+        llm_client: Optional[Any] = None,
+        model: Optional[str] = None,
+        # Legacy parameters for backward compatibility
         azure_endpoint: Optional[str] = None,
         azure_api_key: Optional[str] = None,
         azure_deployment: Optional[str] = None,
@@ -110,13 +113,38 @@ When creating plans:
         """Initialize Planning Agent.
 
         Args:
+            llm_client: Pre-configured LLM client (OpenAI-compatible)
+            model: Model name to use
+            azure_endpoint: (Legacy) Azure OpenAI endpoint
+            azure_api_key: (Legacy) Azure OpenAI API key
+            azure_deployment: (Legacy) Azure deployment name
+            openrouter_api_key: (Legacy) OpenRouter API key for fallback
+        """
+        # Use provided client if available
+        if llm_client is not None and model is not None:
+            self._llm_client = llm_client
+            self._model = model
+        else:
+            # Legacy initialization for backward compatibility
+            self._llm_client: Optional[Any] = None
+            self._model: str = ""
+            self._init_legacy_client(azure_endpoint, azure_api_key, azure_deployment, openrouter_api_key)
+
+    def _init_legacy_client(
+        self,
+        azure_endpoint: Optional[str],
+        azure_api_key: Optional[str],
+        azure_deployment: Optional[str],
+        openrouter_api_key: Optional[str],
+    ) -> None:
+        """Initialize LLM client using legacy parameters.
+
+        Args:
             azure_endpoint: Azure OpenAI endpoint
             azure_api_key: Azure OpenAI API key
             azure_deployment: Azure deployment name
             openrouter_api_key: OpenRouter API key for fallback
         """
-        self._llm_client: Optional[Any] = None
-        self._model: str = ""
 
         if azure_endpoint and azure_api_key and OPENAI_AVAILABLE:
             self._llm_client = AzureOpenAI(

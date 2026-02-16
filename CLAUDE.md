@@ -80,10 +80,11 @@ Threshold: 95% - triggers HITL clarification if below.
 - Requires user approval before execution
 
 ### 5. Python Sandbox
-- Docker-based isolated execution
-- No network access (air-gapped)
+- Docker-based isolated execution (optional - can be disabled for development)
+- No network access when enabled (air-gapped)
 - Whitelisted packages: pandas, numpy, scipy, scikit-learn, plotly, matplotlib
 - Resource limits: 512MB RAM, 30s timeout
+- ⚠️ Warning: Disabling sandbox executes code locally with reduced security
 
 ## Project Structure (Target)
 
@@ -146,14 +147,18 @@ portfolio_agenticAI_autoEDA/
 
 ### Environment Variables
 ```bash
-# LLM API
+# LLM Provider Selection
+# Options: "azure" (Azure OpenAI) or "openrouter" (OpenRouter)
+LLM_PROVIDER=azure
+
+# Azure OpenAI Configuration (if LLM_PROVIDER=azure)
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_KEY=your_api_key
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
 AZURE_GPT4_DEPLOYMENT=gpt-4-turbo
 AZURE_GPT35_DEPLOYMENT=gpt-35-turbo
 
-# Fallback
+# OpenRouter Configuration (if LLM_PROVIDER=openrouter)
 OPENROUTER_API_KEY=your_openrouter_key
 OPENROUTER_MODEL=anthropic/claude-3-sonnet
 
@@ -166,12 +171,80 @@ POSTGRES_PASSWORD=secure_password
 
 # Application
 UNCERTAINTY_THRESHOLD=0.95
+SANDBOX_ENABLED=true
 MAX_SANDBOX_TIMEOUT=30
 MAX_UPLOAD_SIZE_MB=100
 CACHE_ENABLED=true
 CHROMA_PERSIST_DIR=./chroma_db
 LOG_LEVEL=INFO
 ```
+
+### LLM Provider Options
+
+The system supports two LLM providers that can be selected via the `LLM_PROVIDER` environment variable:
+
+#### Option 1: Azure OpenAI
+```bash
+LLM_PROVIDER=azure
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_API_KEY=your_key
+AZURE_GPT4_DEPLOYMENT=gpt-4-turbo
+```
+
+**Advantages:**
+- Enterprise support and SLAs
+- Data residency controls
+- Custom rate limits
+- Dedicated capacity
+
+#### Option 2: OpenRouter
+```bash
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=your_key
+OPENROUTER_MODEL=anthropic/claude-3-sonnet
+```
+
+**Advantages:**
+- Access to multiple models (Claude, GPT-4, Llama, etc.)
+- Pay-as-you-go pricing
+- No Azure subscription required
+- Easy model switching
+
+**Available OpenRouter Models:**
+- `anthropic/claude-3-opus` - Most capable, highest cost
+- `anthropic/claude-3-sonnet` - Balanced performance (recommended)
+- `anthropic/claude-3-haiku` - Fast, cost-effective
+- `openai/gpt-4-turbo` - Latest GPT-4
+- `meta-llama/llama-3-70b` - Open source option
+
+The system automatically handles fallback between providers if one is unavailable.
+
+### Sandbox Mode
+
+Code execution can be configured to run in Docker sandbox (secure) or locally (faster, less secure):
+
+```bash
+# Recommended for production
+SANDBOX_ENABLED=true
+
+# For development only
+SANDBOX_ENABLED=false
+```
+
+**Docker Sandbox Mode (SANDBOX_ENABLED=true):**
+- ✅ Full process isolation
+- ✅ Network disabled
+- ✅ Memory and CPU limits enforced
+- ✅ Read-only filesystem
+- ⚠️ Requires Docker installation
+- ⚠️ Slower startup (~2s)
+
+**Local Execution Mode (SANDBOX_ENABLED=false):**
+- ✅ Faster execution (no container overhead)
+- ✅ No Docker required
+- ⚠️ Less secure - code runs in main process
+- ⚠️ Code validation still applied but not isolated
+- ⚠️ Use only for development/testing
 
 ### Semantic Layer Schema
 Metrics, dimensions, relationships, and business rules defined in JSON.

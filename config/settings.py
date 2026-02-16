@@ -72,12 +72,22 @@ class AppSettings(BaseSettings):
     app_name: str = Field(default="Agentic Data Analyst", description="Application name")
     debug: bool = Field(default=False, description="Debug mode")
 
+    # LLM Provider Selection
+    llm_provider: str = Field(
+        default="azure",
+        description="LLM provider to use: 'azure' or 'openrouter'"
+    )
+
     # Uncertainty threshold
     uncertainty_threshold: float = Field(
         default=0.95, description="Threshold for triggering HITL clarification"
     )
 
     # Sandbox settings
+    sandbox_enabled: bool = Field(
+        default=True,
+        description="Enable Docker sandbox for code execution. If False, runs code locally (LESS SECURE)"
+    )
     max_sandbox_timeout: int = Field(
         default=30, description="Maximum timeout for sandbox execution in seconds"
     )
