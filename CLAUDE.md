@@ -17,6 +17,7 @@
 | Embeddings | HuggingFace, Azure OpenAI, OpenRouter | sentence-transformers/all-MiniLM-L6-v2, OpenAI Embedding Models, Other Embedding Models |
 | LLM | Azure OpenAI, OpenRouter | GPT-4, Claude, Llama |
 | Fallback LLM | OpenRouter | Claude/Llama |
+| LLM Observability | Langfuse | 2.0+ |
 | Code Sandbox | Docker | 24+ |
 | Visualization | Plotly | 5.18+ |
 | Data Tables | Streamlit-AgGrid | 1.0+ |
@@ -246,6 +247,41 @@ SANDBOX_ENABLED=false
 - ⚠️ Code validation still applied but not isolated
 - ⚠️ Use only for development/testing
 
+### LLM Observability with Langfuse
+
+The system includes integrated LLM observability using Langfuse for tracking, debugging, and analyzing all LLM interactions:
+
+```bash
+# Enable/disable Langfuse logging
+LANGFUSE_ENABLED=true
+
+# Langfuse credentials (obtain from Langfuse UI)
+LANGFUSE_PUBLIC_KEY=pk-lf-your-public-key
+LANGFUSE_SECRET_KEY=sk-lf-your-secret-key
+LANGFUSE_HOST=http://localhost:3000
+```
+
+**Features:**
+- Automatic tracing of all LLM calls (prompts, completions, latency)
+- Session and user tracking for multi-turn conversations
+- Cost tracking per request and model
+- Performance analytics and debugging dashboard
+- Export traces for auditing and compliance
+
+**Setup:**
+1. Start Langfuse with Docker Compose: `docker-compose up langfuse -d`
+2. Access Langfuse UI at http://localhost:3000
+3. Create a new project and obtain API keys
+4. Add keys to your `.env` file
+5. All LLM calls are automatically logged with context
+
+**Integration:**
+The system wraps the OpenAI client with Langfuse observability. All calls through `app/utils/llm_client.py` are automatically traced with:
+- Trace names for categorization
+- User and session IDs for tracking
+- Custom tags for filtering
+- Full prompt and response logging
+
 ### Semantic Layer Schema
 Metrics, dimensions, relationships, and business rules defined in JSON.
 See `config/semantic_layer.json` for structure.
@@ -264,10 +300,16 @@ See `config/semantic_layer.json` for structure.
 # Install dependencies
 pip install -r requirements.txt
 
-# Start PostgreSQL and services
+# Start all services (PostgreSQL, Langfuse, app)
 docker-compose up -d
 
-# Run the Streamlit app
+# Start only database services
+docker-compose up postgres langfuse -d
+
+# Access Langfuse UI for LLM observability
+# Navigate to http://localhost:3000
+
+# Run the Streamlit app (development)
 streamlit run app/main.py
 
 # Run tests
@@ -275,6 +317,9 @@ pytest tests/ -v
 
 # Build sandbox image
 docker build -t analytics-sandbox:latest ./sandbox
+
+# View Langfuse logs
+docker-compose logs -f langfuse
 ```
 
 ## Performance Targets

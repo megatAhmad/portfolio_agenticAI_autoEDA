@@ -18,6 +18,43 @@ services:
       timeout: 5s
       retries: 5
 
+  langfuse_db:
+    image: postgres:15-alpine
+    container_name: ada_langfuse_db
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD:-langfuse_password}
+    ports:
+      - "5433:5432"
+    volumes:
+      - langfuse_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  langfuse:
+    image: langfuse/langfuse:latest
+    container_name: ada_langfuse
+    ports:
+      - "${LANGFUSE_PORT:-3000}:3000"
+    environment:
+      - DATABASE_URL=postgresql://langfuse:${LANGFUSE_DB_PASSWORD:-langfuse_password}@langfuse_db:5432/langfuse
+      - NEXTAUTH_URL=${LANGFUSE_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${LANGFUSE_SECRET:-langfuse-secret-change-in-production}
+      - SALT=${LANGFUSE_SALT:-langfuse-salt-change-in-production}
+      - TELEMETRY_ENABLED=${LANGFUSE_TELEMETRY:-true}
+    depends_on:
+      langfuse_db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/public/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   app:
     build:
       context: .
@@ -39,11 +76,17 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - UNCERTAINTY_THRESHOLD=${UNCERTAINTY_THRESHOLD:-0.95}
       - CHROMA_PERSIST_DIR=/app/chroma_db
+      - LANGFUSE_ENABLED=${LANGFUSE_ENABLED:-true}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-http://langfuse:3000}
     volumes:
       - ./config:/app/config:ro
       - chroma_data:/app/chroma_db
     depends_on:
       postgres:
+        condition: service_healthy
+      langfuse:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
@@ -54,3 +97,4 @@ services:
 volumes:
   postgres_data:
   chroma_data:
+  langfuse_data:

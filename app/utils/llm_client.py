@@ -7,6 +7,58 @@ from config.settings import AppSettings, get_settings
 
 logger = logging.getLogger(__name__)
 
+# Try to import Langfuse
+try:
+    from langfuse.openai import openai as langfuse_openai
+    from langfuse import Langfuse
+    LANGFUSE_AVAILABLE = True
+except ImportError:
+    LANGFUSE_AVAILABLE = False
+    logger.warning("Langfuse not available. Install with: pip install langfuse")
+
+# Global Langfuse instance
+_langfuse_instance: Optional[Any] = None
+
+
+def get_langfuse(settings: Optional[AppSettings] = None) -> Optional[Any]:
+    """Get or create Langfuse instance.
+
+    Args:
+        settings: Application settings
+
+    Returns:
+        Langfuse instance or None if disabled/unavailable
+    """
+    global _langfuse_instance
+
+    if settings is None:
+        settings = get_settings()
+
+    if not settings.langfuse.enabled:
+        return None
+
+    if not LANGFUSE_AVAILABLE:
+        logger.warning("Langfuse is enabled but not installed")
+        return None
+
+    if not settings.langfuse.public_key or not settings.langfuse.secret_key:
+        logger.warning("Langfuse credentials not configured")
+        return None
+
+    if _langfuse_instance is None:
+        try:
+            _langfuse_instance = Langfuse(
+                public_key=settings.langfuse.public_key,
+                secret_key=settings.langfuse.secret_key,
+                host=settings.langfuse.host,
+            )
+            logger.info(f"Langfuse initialized with host: {settings.langfuse.host}")
+        except Exception as e:
+            logger.error(f"Failed to initialize Langfuse: {e}")
+            return None
+
+    return _langfuse_instance
+
 
 def create_llm_client(
     settings: Optional[AppSettings] = None,
@@ -37,14 +89,27 @@ def create_llm_client(
 
     provider = settings.llm_provider.lower()
 
+    # Create base client
     if provider == "azure":
-        return _create_azure_client(settings, prefer_fast_model)
+        client, model = _create_azure_client(settings, prefer_fast_model)
     elif provider == "openrouter":
-        return _create_openrouter_client(settings, prefer_fast_model)
+        client, model = _create_openrouter_client(settings, prefer_fast_model)
     else:
         raise ValueError(
             f"Invalid LLM provider: {provider}. Must be 'azure' or 'openrouter'"
         )
+
+    # Wrap with Langfuse if enabled
+    langfuse = get_langfuse(settings)
+    if langfuse and LANGFUSE_AVAILABLE:
+        try:
+            # Patch the client with Langfuse observability
+            client = langfuse_openai.wrap_openai_client(client)
+            logger.info("LLM client wrapped with Langfuse observability")
+        except Exception as e:
+            logger.warning(f"Failed to wrap client with Langfuse: {e}")
+
+    return client, model
 
 
 def _create_azure_client(
@@ -168,9 +233,13 @@ def call_llm(
     messages: list[dict[str, str]],
     temperature: float = 0.7,
     max_tokens: int = 2000,
+    trace_name: Optional[str] = None,
+    user_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    tags: Optional[list[str]] = None,
     **kwargs,
 ) -> str:
-    """Call LLM with retry logic.
+    """Call LLM with retry logic and optional Langfuse tracing.
 
     Args:
         client: OpenAI-compatible client
@@ -178,6 +247,10 @@ def call_llm(
         messages: Chat messages
         temperature: Sampling temperature
         max_tokens: Maximum tokens to generate
+        trace_name: Optional name for Langfuse trace
+        user_id: Optional user ID for Langfuse
+        session_id: Optional session ID for Langfuse
+        tags: Optional tags for Langfuse
         **kwargs: Additional parameters
 
     Returns:
@@ -188,6 +261,17 @@ def call_llm(
     """
     max_retries = 3
     retry_delay = 2
+
+    # Add Langfuse metadata if available
+    if LANGFUSE_AVAILABLE and get_langfuse():
+        if trace_name:
+            kwargs.setdefault("name", trace_name)
+        if user_id:
+            kwargs.setdefault("user_id", user_id)
+        if session_id:
+            kwargs.setdefault("session_id", session_id)
+        if tags:
+            kwargs.setdefault("tags", tags)
 
     for attempt in range(max_retries):
         try:

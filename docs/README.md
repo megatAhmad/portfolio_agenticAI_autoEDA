@@ -56,9 +56,10 @@ ADA Consultant Pattern:
 - **Human-in-the-Loop (HITL)** - Clarification questions when confidence < 95%
 - **Semantic Context** - Business glossary with metrics, dimensions, and rules
 - **RAG-Enhanced** - ChromaDB + HuggingFace embeddings for context retrieval
-- **Secure Sandbox** - Docker-isolated Python execution
+- **Secure Sandbox** - Docker-isolated Python execution (optional)
 - **Interactive Visualizations** - Auto-generated Plotly charts
 - **Plan Approval** - Users approve execution plans before running
+- **LLM Observability** - Langfuse integration for tracing, debugging, and cost tracking
 
 ---
 
@@ -86,8 +87,13 @@ cp .env.example .env
 ### Running the Application
 
 ```bash
-# Start PostgreSQL (optional, for full functionality)
-docker-compose up -d postgres
+# Start all services (PostgreSQL + Langfuse)
+docker-compose up -d
+
+# Or start selectively
+docker-compose up -d postgres langfuse
+
+# Access Langfuse UI for LLM observability at http://localhost:3000
 
 # Run Streamlit app
 streamlit run app/main.py

@@ -37,6 +37,17 @@ class OpenRouterSettings(BaseSettings):
     )
 
 
+class LangfuseSettings(BaseSettings):
+    """Langfuse observability configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="LANGFUSE_")
+
+    enabled: bool = Field(default=True, description="Enable Langfuse logging")
+    public_key: str = Field(default="", description="Langfuse public key")
+    secret_key: str = Field(default="", description="Langfuse secret key")
+    host: str = Field(default="http://localhost:3000", description="Langfuse host URL")
+
+
 class PostgresSettings(BaseSettings):
     """PostgreSQL database configuration."""
 
@@ -118,6 +129,7 @@ class AppSettings(BaseSettings):
     azure_openai: AzureOpenAISettings = Field(default_factory=AzureOpenAISettings)
     openrouter: OpenRouterSettings = Field(default_factory=OpenRouterSettings)
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
+    langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
 
     # Scoring weights
     data_completeness_weight: float = Field(
